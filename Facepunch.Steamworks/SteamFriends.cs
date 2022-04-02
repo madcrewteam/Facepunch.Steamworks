@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using Steamworks.Data;
@@ -20,10 +19,14 @@ namespace Steamworks
 
 			richPresence = new Dictionary<string, string>();
 
+			largeAvatarImages = new Dictionary<ulong, Image?>();
+
 			InstallEvents();
 		}
 
 		static Dictionary<string, string> richPresence;
+
+        static Dictionary<ulong, Data.Image?> largeAvatarImages;
 
 		internal void InstallEvents()
 		{
@@ -34,7 +37,8 @@ namespace Steamworks
 			Dispatch.Install<GameServerChangeRequested_t>( x => OnGameServerChangeRequested?.Invoke( x.ServerUTF8(), x.PasswordUTF8() ) );
 			Dispatch.Install<GameLobbyJoinRequested_t>( x => OnGameLobbyJoinRequested?.Invoke( new Lobby( x.SteamIDLobby ), x.SteamIDFriend ) );
 			Dispatch.Install<FriendRichPresenceUpdate_t>( x => OnFriendRichPresenceUpdate?.Invoke( new Friend( x.SteamIDFriend ) ) );
-		}
+            Dispatch.Install<AvatarImageLoaded_t>( OnAvatarImage );
+        }
 
 		/// <summary>
 		/// Called when chat message has been received from a friend. You'll need to turn on
@@ -76,6 +80,25 @@ namespace Steamworks
 		/// Callback indicating updated data about friends rich presence information
 		/// </summary>
 		public static event Action<Friend> OnFriendRichPresenceUpdate;
+
+		/// <summary>
+		/// Called when a large avatar is loaded if you have tried requesting it when it was unavailable.
+		/// </summary>
+        public static event Action<Image?> OnAvatarImageLoaded;
+
+        static void OnAvatarImage(AvatarImageLoaded_t data)
+        {
+			if (OnAvatarImageLoaded == null) return;
+
+			var image = SteamUtils.GetImage(data.Image);
+
+            if (!largeAvatarImages.ContainsKey(data.SteamID))
+            {
+				largeAvatarImages.Add(data.SteamID, image);
+            }
+
+			OnAvatarImageLoaded(image);
+        }
 
 		static unsafe void OnFriendChatMessage( GameConnectedFriendChatMsg_t data )
 		{
@@ -239,23 +262,28 @@ namespace Steamworks
 			return SteamUtils.GetImage( Internal.GetMediumFriendAvatar( steamid ) );
 		}
 
-		public static async Task<Data.Image?> GetLargeAvatarAsync( SteamId steamid )
+        public static async Task<Data.Image?> GetLargeAvatarAsync( SteamId steamid )
 		{
-			await CacheUserInformationAsync( steamid, false );
+            var imageid = Internal.GetLargeFriendAvatar( steamid );
+            if (imageid == 0)
+            {
+                return null;
+            }
 
-			var imageid = Internal.GetLargeFriendAvatar( steamid );
+            if (imageid != -1)
+            {
+				return SteamUtils.GetImage(imageid);
+            }
 
-			// Wait for the image to download
-			while ( imageid == -1 )
-			{
-				await Task.Delay( 50 );
-				imageid = Internal.GetLargeFriendAvatar( steamid );
-			}
+            while (!largeAvatarImages.ContainsKey(steamid.Value))
+            {
+                await Task.Delay(50);
+            }
 
-			return SteamUtils.GetImage( imageid );
-		}
+            return largeAvatarImages[steamid.Value];
+        }
 
-		/// <summary>
+        /// <summary>
 		/// Find a rich presence value by key for current user. Will be null if not found.
 		/// </summary>
 		public static string GetRichPresence( string key )

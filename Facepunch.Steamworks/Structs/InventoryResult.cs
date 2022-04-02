@@ -39,17 +39,17 @@ namespace Steamworks
 			return SteamInventory.Internal.CheckResultSteamID( _id, steamId );
 		}
 
-		public InventoryItem[] GetItems( bool includeProperties = false )
-		{
+		public List<InventoryItem> GetItems( bool includeProperties = false )
+        {
+            var items = new List<InventoryItem>();
+
 			uint cnt = (uint) ItemCount;
-			if ( cnt <= 0 ) return null;
+			if ( cnt <= 0 ) return items;
 
 			var pOutItemsArray = new SteamItemDetails_t[cnt];
 
 			if ( !SteamInventory.Internal.GetResultItems( _id, pOutItemsArray, ref cnt ) )
 				return null;
-
-			var items = new InventoryItem[cnt];
 
 			for( int i=0; i< cnt; i++ )
 			{
@@ -58,11 +58,10 @@ namespace Steamworks
 				if ( includeProperties )
 					item._properties = InventoryItem.GetProperties( _id, i );
 
-				items[i] = item;
+                items.Add(item);
 			}
 
-
-			return items;			
+            return items;
 		}
 
 		public void Dispose()

@@ -116,7 +116,7 @@ namespace Steamworks
 			var result = await SteamInventory.GetAllItemsAsync();
 
 			Assert.IsTrue( result.HasValue );
-			Assert.IsTrue( result.Value.GetItems().Length == fresult.Value.ItemCount );
+			Assert.IsTrue( result.Value.GetItems().Count == fresult.Value.ItemCount );
 
 
 			await Task.Delay( 1000 );
