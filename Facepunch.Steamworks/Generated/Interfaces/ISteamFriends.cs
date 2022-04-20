@@ -7,7 +7,7 @@ using Steamworks.Data;
 
 namespace Steamworks
 {
-	internal class ISteamFriends : SteamInterface
+	internal unsafe class ISteamFriends : SteamInterface
 	{
 		
 		internal ISteamFriends( bool IsGameServer )
@@ -838,6 +838,28 @@ namespace Steamworks
 		internal void ActivateGameOverlayRemotePlayTogetherInviteDialog( SteamId steamIDLobby )
 		{
 			_ActivateGameOverlayRemotePlayTogetherInviteDialog( Self, steamIDLobby );
+		}
+		
+		#region FunctionMeta
+		[DllImport( Platform.LibraryName, EntryPoint = "SteamAPI_ISteamFriends_RegisterProtocolInOverlayBrowser", CallingConvention = Platform.CC)]
+		[return: MarshalAs( UnmanagedType.I1 )]
+		private static extern bool _RegisterProtocolInOverlayBrowser( IntPtr self, [MarshalAs( UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof( Utf8StringToNative ) )] string pchProtocol );
+		
+		#endregion
+		internal bool RegisterProtocolInOverlayBrowser( [MarshalAs( UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof( Utf8StringToNative ) )] string pchProtocol )
+		{
+			var returnValue = _RegisterProtocolInOverlayBrowser( Self, pchProtocol );
+			return returnValue;
+		}
+		
+		#region FunctionMeta
+		[DllImport( Platform.LibraryName, EntryPoint = "SteamAPI_ISteamFriends_ActivateGameOverlayInviteDialogConnectString", CallingConvention = Platform.CC)]
+		private static extern void _ActivateGameOverlayInviteDialogConnectString( IntPtr self, [MarshalAs( UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof( Utf8StringToNative ) )] string pchConnectString );
+		
+		#endregion
+		internal void ActivateGameOverlayInviteDialogConnectString( [MarshalAs( UnmanagedType.CustomMarshaler, MarshalTypeRef = typeof( Utf8StringToNative ) )] string pchConnectString )
+		{
+			_ActivateGameOverlayInviteDialogConnectString( Self, pchConnectString );
 		}
 		
 	}

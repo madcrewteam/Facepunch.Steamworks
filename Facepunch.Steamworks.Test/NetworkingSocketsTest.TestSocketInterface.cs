@@ -53,6 +53,7 @@ namespace Steamworks
 			public override void OnDisconnected( Connection connection, ConnectionInfo data )
 			{
 				Console.WriteLine( $" - OnDisconnected" );
+
 				base.OnDisconnected( connection, data );
 			}
 
@@ -96,7 +97,7 @@ namespace Steamworks
 					Receive();
 					await Task.Delay( 100 );
 
-					if ( sw.Elapsed.TotalSeconds > 5 )
+					if ( sw.Elapsed.TotalSeconds > 30 )
 					{
 						Console.WriteLine( "Socket: This all took too long - throwing an exception" );
 						Assert.Fail( "Socket Took Too Long" );
