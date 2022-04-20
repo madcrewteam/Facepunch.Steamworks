@@ -22,7 +22,7 @@ namespace Steamworks
 
 			InstallEvents( server );
 		}
-	
+
 		internal static void InstallEvents( bool server )
 		{
 			if ( !server )
@@ -36,7 +36,7 @@ namespace Steamworks
 		private static void InventoryUpdated( SteamInventoryFullUpdate_t x )
 		{
 			var r = new InventoryResult( x.Handle, false );
-			Items = r.GetItems( false );
+			Items = new List<InventoryItem>( r.GetItems( true ) );
 
 			OnInventoryUpdated?.Invoke( r );
 		}
@@ -118,7 +118,7 @@ namespace Steamworks
 			if ( _defMap == null )
 				return null;
 
-			if ( _defMap.TryGetValue( defId, out var val  ) )
+			if ( _defMap.TryGetValue( defId, out var val ) )
 				return val;
 
 			return null;
@@ -153,7 +153,7 @@ namespace Steamworks
 		/// <summary>
 		/// We will try to keep this list of your items automatically up to date.
 		/// </summary>
-		public static InventoryItem[] Items { get; internal set; }
+		public static List<InventoryItem> Items { get; internal set; }
 
 		public static InventoryDef[] Definitions { get; internal set; }
 		static Dictionary<int, InventoryDef> _defMap;
@@ -247,7 +247,7 @@ namespace Steamworks
 			var givec = new uint[] { 1 };
 
 			var sell = list.Select( x => x.Item.Id ).ToArray();
-			var sellc = list.Select( x => (uint) x.Quantity ).ToArray();
+			var sellc = list.Select( x => (uint)x.Quantity ).ToArray();
 
 			if ( !Internal.ExchangeItems( ref sresult, give, givec, 1, sell, sellc, (uint)sell.Length ) )
 				return null;
@@ -288,7 +288,7 @@ namespace Steamworks
 				if ( !Internal.DeserializeResult( ref sresult, (IntPtr)ptr, (uint)dataLength, false ) )
 					return null;
 
-				
+
 
 				return await InventoryResult.GetAsync( sresult.Value );
 			}
@@ -347,9 +347,8 @@ namespace Steamworks
 		/// </summary>
 		public static async Task<InventoryPurchaseResult?> StartPurchaseAsync( InventoryDef[] items )
 		{
-			var d = items.GroupBy( x => x._id ).ToDictionary( x => x.Key, x => (uint) x.Count() );
-			var item_i = d.Keys.ToArray();
-			var item_q = d.Values.ToArray();
+			var item_i = items.Select( x => x._id ).ToArray();
+			var item_q = items.Select( x => (uint)1 ).ToArray();
 
 			var r = await Internal.StartPurchase( item_i, item_q, (uint)item_i.Length );
 			if ( !r.HasValue ) return null;
@@ -361,6 +360,106 @@ namespace Steamworks
 				TransID = r.Value.TransID
 			};
 		}
+		/// <summary>
+		/// Starts a transaction request to update dynamic properties on items for the current user.
+		/// This call is rate-limited by user, so property modifications should be batched as much as possible (e.g. at the end of a map or game session).
+		/// After calling SetProperty or RemoveProperty for all the items that you want to modify, you will need to call SubmitUpdateProperties to send the request to the Steam servers.
+		/// </summary>
+		/// <returns>Transaction handler</returns>
+		public static ulong StartUpdateProperties()
+		{
+			return Internal.StartUpdateProperties();
+		}
 
+		/// <summary>
+		/// Submits the transaction request to modify dynamic properties on items for the current user.
+		/// </summary>
+		/// <param name="handle">The update handle corresponding to the transaction request, returned from StartUpdateProperties.</param>
+		/// <returns>a new inventory result handle.</returns>
+		public static async Task<InventoryResult?> SubmitUpdateProperties( ulong handle )
+		{
+			var sresult = Defines.k_SteamInventoryResultInvalid;
+			if ( !Internal.SubmitUpdateProperties( new SteamInventoryUpdateHandle_t { Value = handle }, ref sresult ) )
+				return null;
+
+			var result = await InventoryResult.GetAsync( sresult );
+
+			if ( result.HasValue && result.Value.ItemCount > 0 )
+			{
+				var updatedItems = result.Value.GetItems( true );
+
+				foreach ( var updatedItem in updatedItems )
+				{
+					for ( int i = 0; i < Items.Count; i++ )
+					{
+						if ( Items[i].Id == updatedItem.Id )
+						{
+							Items[i] = updatedItem;
+						}
+					}
+				}
+			}
+
+			return result;
+		}
+
+		/// <summary>
+		/// Removes a dynamic property for the given item.
+		/// </summary>
+		/// <param name="handle">The update handle corresponding to the transaction request, returned from StartUpdateProperties.</param>
+		/// <param name="itemId">ID of the item being modified.</param>
+		/// <param name="propertyName">The dynamic property being removed.</param>
+		public static bool RemoveProperty( ulong handle, InventoryItemId itemId, string propertyName )
+		{
+			return Internal.RemoveProperty( new SteamInventoryUpdateHandle_t { Value = handle }, itemId, propertyName );
+		}
+
+		/// <summary>
+		/// Sets a dynamic property for the given item. Supported value types are strings, boolean, 64 bit integers, and 32 bit floats.
+		/// </summary>
+		/// <param name="handle">The update handle corresponding to the transaction request, returned from StartUpdateProperties.</param>
+		/// <param name="itemId">ID of the item being modified.</param>
+		/// <param name="propertyName">The dynamic property being added or updated.</param>
+		/// <param name="propertyValue">The string value being set.</param>
+		public static bool SetProperty( ulong handle, InventoryItemId itemId, string propertyName, string propertyValue )
+		{
+			return Internal.SetProperty( new SteamInventoryUpdateHandle_t { Value = handle }, itemId, propertyName, propertyValue );
+		}
+
+		/// <summary>
+		/// Sets a dynamic property for the given item. Supported value types are strings, boolean, 64 bit integers, and 32 bit floats.
+		/// </summary>
+		/// <param name="handle">The update handle corresponding to the transaction request, returned from StartUpdateProperties.</param>
+		/// <param name="itemId">ID of the item being modified.</param>
+		/// <param name="propertyName">The dynamic property being added or updated.</param>
+		/// <param name="propertyValue">The boolean value being set.</param>
+		public static bool SetProperty( ulong handle, InventoryItemId itemId, string propertyName, bool propertyValue )
+		{
+			return Internal.SetProperty( new SteamInventoryUpdateHandle_t { Value = handle }, itemId, propertyName, propertyValue );
+		}
+
+		/// <summary>
+		/// Sets a dynamic property for the given item. Supported value types are strings, boolean, 64 bit integers, and 32 bit floats.
+		/// </summary>
+		/// <param name="handle">The update handle corresponding to the transaction request, returned from StartUpdateProperties.</param>
+		/// <param name="itemId">ID of the item being modified.</param>
+		/// <param name="propertyName">The dynamic property being added or updated.</param>
+		/// <param name="propertyValue">The float value being set.</param>
+		public static bool SetProperty( ulong handle, InventoryItemId itemId, string propertyName, float propertyValue )
+		{
+			return Internal.SetProperty( new SteamInventoryUpdateHandle_t { Value = handle }, itemId, propertyName, propertyValue );
+		}
+
+		/// <summary>
+		/// Sets a dynamic property for the given item. Supported value types are strings, boolean, 64 bit integers, and 32 bit floats.
+		/// </summary>
+		/// <param name="handle">The update handle corresponding to the transaction request, returned from StartUpdateProperties.</param>
+		/// <param name="itemId">ID of the item being modified.</param>
+		/// <param name="propertyName">The dynamic property being added or updated.</param>
+		/// <param name="propertyValue">The long value being set.</param>
+		public static bool SetProperty( ulong handle, InventoryItemId itemId, string propertyName, long propertyValue )
+		{
+			return Internal.SetProperty( new SteamInventoryUpdateHandle_t { Value = handle }, itemId, propertyName, propertyValue );
+		}
 	}
 }
